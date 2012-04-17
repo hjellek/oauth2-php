@@ -846,10 +846,9 @@ class OAuth2 {
 		if (!$input["response_type"]) {
 			throw new OAuth2RedirectException($input["redirect_uri"], self::ERROR_INVALID_REQUEST, 'Invalid or missing response type.', $input["state"]);
 		}
-		
-		// Check requested auth response type against interfaces of storage engine
-		$reflect = new ReflectionClass($this->storage);
-		if (!$reflect->hasConstant('RESPONSE_TYPE_' . strtoupper($input['response_type']))) {
+
+        // Make sure the response type is valid
+        if (!$this->isValidResponseType($input['response_type'])) {
 			throw new OAuth2RedirectException($input["redirect_uri"], self::ERROR_UNSUPPORTED_RESPONSE_TYPE, NULL, $input["state"]);
 		}
 		
@@ -1131,4 +1130,12 @@ class OAuth2 {
 		}
 		return strcasecmp(substr($inputUri, 0, strlen($storedUri)), $storedUri) === 0;
 	}
+
+    protected function isValidResponseType($response_type)
+    {
+        $reflection = new ReflectionClass(__CLASS__);
+        if(in_array($response_type, $reflection->getConstants()))
+            return true;
+        return false;
+    }
 }
