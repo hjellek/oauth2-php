@@ -1,5 +1,6 @@
 <?php
-
+require 'error/OAuth2Exception.php';
+require 'interface/IOAuth2Persistent.php';
 /**
  * OAuth2.0 draft v10 client-side implementation.
  *
@@ -8,7 +9,7 @@
  *
  * @sa <a href="https://github.com/facebook/php-sdk">Facebook PHP SDK</a>.
  */
-abstract class OAuth2Client {
+abstract class OAuth2BaseClient {
 	
 	/**
 	 * The default Cache Lifetime (in seconds).
@@ -246,18 +247,17 @@ abstract class OAuth2Client {
 	 * @param $session
 	 * (optional) The session object to be set. NULL if hope to frush existing
 	 * session object.
-	 * @param $write_cookie
-	 * (optional) TRUE if a cookie should be written. This value is ignored
-	 * if cookie support has been disabled.
+	 * @param $save_persistent
+	 * (optional) TRUE if session should be saved persistent
 	 *
 	 * @return
 	 * The current OAuth2.0 client-side instance.
 	 */
-	public function setSession($session = NULL, $write_cookie = TRUE) {
+	public function setSession($session = NULL, $save_persistent = TRUE) {
 		$this->setVariable('_session', $this->validateSessionObject($session));
 		$this->setVariable('_session_loaded', TRUE);
-		if ($write_cookie) {
-			$this->setCookieFromSession($this->getVariable('_session'));
+		if ($save_persistent && $this->hasPersistenceSupport()) {
+			$this->savePersistent($this->getVariable('_session'));
 		}
 		return $this;
 	}
@@ -276,7 +276,7 @@ abstract class OAuth2Client {
 	public function getSession() {
 		if (!$this->getVariable('_session_loaded')) {
 			$session = NULL;
-			$write_cookie = TRUE;
+			$save_persistent = TRUE;
 			
 			// Try obtain login session by custom method.
 			$session = $this->getSessionObject(NULL);
@@ -297,22 +297,23 @@ abstract class OAuth2Client {
 			}
 			
 			// Try loading session from cookie if necessary.
-			if (!$session && $this->getVariable('cookie_support')) {
-				$cookie_name = $this->getSessionCookieName();
-				if (isset($_COOKIE[$cookie_name])) {
-					$session = array();
-					parse_str(trim(get_magic_quotes_gpc() ? stripslashes($_COOKIE[$cookie_name]) : $_COOKIE[$cookie_name], '"'), $session);
-					$session = $this->validateSessionObject($session);
-					// Write only if we need to delete a invalid session cookie.
-					$write_cookie = empty($session);
-				}
+			if (!$session && $this->hasPersistenceSupport()) {
+				$session = $this->loadPersistent();
+                // Write only if we need to delete a invalid session cookie.
+                $save_persistent = empty($session);
 			}
 			
-			$this->setSession($session, $write_cookie);
+			$this->setSession($session, $save_persistent);
 		}
 		
 		return $this->getVariable('_session');
 	}
+
+    private function hasPersistenceSupport()
+    {
+        $isPersistent = ($this instanceof IOAuth2Persistent);
+        return $isPersistent;
+    }
 
 	/**
 	 * Gets an OAuth2.0 access token from session.
@@ -443,6 +444,7 @@ abstract class OAuth2Client {
 		
 		$opts = self::$CURL_OPTS;
 		if ($params) {
+            Yii::log("Making request with params: ".var_export($params, true), CLogger::LEVEL_TRACE);
 			switch ($method) {
 				case 'GET':
 					$path .= '?' . http_build_query($params, NULL, '&');
@@ -508,53 +510,6 @@ abstract class OAuth2Client {
 		}
 		
 		return $body;
-	}
-
-	/**
-	 * The name of the cookie that contains the session object.
-	 *
-	 * @return
-	 * The cookie name.
-	 */
-	private function getSessionCookieName() {
-		return 'oauth2_' . $this->getVariable('client_id');
-	}
-
-	/**
-	 * Set a JS Cookie based on the _passed in_ session.
-	 *
-	 * It does not use the currently stored session - you need to explicitly
-	 * pass it in.
-	 *
-	 * @param $session
-	 * The session to use for setting the cookie.
-	 */
-	protected function setCookieFromSession($session = NULL) {
-		if (!$this->getVariable('cookie_support'))
-			return;
-		
-		$cookie_name = $this->getSessionCookieName();
-		$value = 'deleted';
-		$expires = time() - 3600;
-		$base_domain = $this->getVariable('base_domain', self::DEFAULT_BASE_DOMAIN);
-		if ($session) {
-			$value = '"' . http_build_query($session, NULL, '&') . '"';
-			$base_domain = isset($session['base_domain']) ? $session['base_domain'] : $base_domain;
-			$expires = isset($session['expires']) ? $session['expires'] : time() + $this->getVariable('expires_in', self::DEFAULT_EXPIRES_IN);
-		}
-		
-		// Prepend dot if a domain is found.
-		if ($base_domain)
-			$base_domain = '.' . $base_domain;
-		
-		// If an existing cookie is not set, we dont need to delete it.
-		if ($value == 'deleted' && empty($_COOKIE[$cookie_name]))
-			return;
-		
-		if (headers_sent())
-			error_log('Could not set cookie. Headers already sent.');
-		else
-			setcookie($cookie_name, $value, $expires, '/', $base_domain);
 	}
 
 	/**
