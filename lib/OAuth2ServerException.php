@@ -45,6 +45,11 @@ class OAuth2ServerException extends Exception {
 		return $this->httpCode;
 	}
 
+    public function getErrorData()
+    {
+        return $this->errorData;
+    }
+
 	/**
 	 * Send out error message in JSON.
 	 *
