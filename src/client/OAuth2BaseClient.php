@@ -338,13 +338,47 @@ abstract class OAuth2BaseClient
         return $this->getVariable('_session');
     }
 
-    public function refreshToken($token)
+    public function makeAuthorizationCodeRequest($auth_code)
     {
-        $access_token = $this->getAccessTokenFromRefreshToken($token);
-        $session = $this->getSessionObject($access_token);
+        $access_token = $this->getAccessTokenFromAuthorizationCode($auth_code);
+        return $this->validateAndSaveAccessToken($access_token);
+    }
+
+    public function makePasswordRequest($username, $password)
+    {
+        $access_token = $this->getAccessTokenFromPassword($username, $password);
+        return $this->validateAndSaveAccessToken($access_token);
+    }
+
+    public function makeRefreshTokenRequest($refresh_token)
+    {
+        $access_token = $this->getAccessTokenFromRefreshToken($refresh_token);
+        return $this->validateAndSaveAccessToken($access_token);
+    }
+
+    public function makeClientCredentialsRequest()
+    {
+        $access_token = $this->getAccessTokenFromClientCredentials();
+        return $this->validateAndSaveAccessToken($access_token);
+    }
+
+    public function makeImplicitRequest()
+    {
+        // not implemented
+    }
+
+    public function validateAndSaveAccessToken($token)
+    {
+        $session = $this->getSessionObject($token);
         $session = $this->validateSessionObject($session);
         $this->setSession($session, true);
         return $session;
+    }
+
+    public function refreshToken($refresh_token)
+    {
+        $access_token = $this->getAccessTokenFromRefreshToken($refresh_token);
+        return $this->validateAndSaveAccessToken($access_token);
     }
 
     private function hasPersistenceSupport()
@@ -368,6 +402,39 @@ abstract class OAuth2BaseClient
         return isset($session['access_token']) ? $session['access_token'] : NULL;
     }
 
+    private function makeTokenRequest($params)
+    {
+        if ($this->getVariable('access_token_uri') && $this->getVariable('client_id') && $this->getVariable('client_secret'))
+        {
+            return json_decode($this->makeRequest(
+                $this->getVariable('access_token_uri'),
+                'POST',
+                $params
+            ), TRUE);
+        }
+        return NULL;
+    }
+
+    /**
+     * Get access token from OAuth2.0 token endpoint with client credentials.
+     *
+     * This function will only be activated if both access token URI, client
+     * identifier and client secret are setup correctly.
+     *
+     * @return
+     * A valid OAuth2.0 JSON decoded access token in associative array, and
+     * NULL if not enough parameters or JSON decode failed.
+     */
+    private function getAccessTokenFromClientCredentials()
+    {
+        $params = array(
+            'grant_type'    => 'client_credentials',
+            'client_id'     => $this->getVariable('client_id'),
+            'client_secret' => $this->getVariable('client_secret'),
+        );
+        return $this->makeTokenRequest($params);
+    }
+
     /**
      * Get access token from OAuth2.0 token endpoint with authorization code.
      *
@@ -384,40 +451,40 @@ abstract class OAuth2BaseClient
      */
     private function getAccessTokenFromAuthorizationCode($code)
     {
-        if ($this->getVariable('access_token_uri') && $this->getVariable('client_id') && $this->getVariable('client_secret'))
-        {
-            return json_decode($this->makeRequest(
-                $this->getVariable('access_token_uri'),
-                'POST',
-                array(
-                    'grant_type'    => 'authorization_code',
-                    'client_id'     => $this->getVariable('client_id'),
-                    'client_secret' => $this->getVariable('client_secret'),
-                    'code'          => $code,
-                    'redirect_uri'  => $this->getCurrentUri()
-                )
-            ), TRUE);
-        }
-        return NULL;
+        $params = array(
+            'grant_type'    => 'authorization_code',
+            'client_id'     => $this->getVariable('client_id'),
+            'client_secret' => $this->getVariable('client_secret'),
+            'code'          => $code,
+            'redirect_uri'  => $this->getCurrentUri()
+        );
+        return $this->makeTokenRequest($params);
     }
 
+    /**
+     * Get access token from OAuth2.0 token endpoint with refresh token.
+     *
+     * This function will only be activated if both access token URI, client
+     * identifier and client secret are setup correctly.
+     *
+     * @param $refresh_token
+     * Refresh token issued by authorization server's authorization
+     * endpoint.
+     *
+     * @return
+     * A valid OAuth2.0 JSON decoded access token in associative array, and
+     * NULL if not enough parameters or JSON decode failed.
+     */
     private function getAccessTokenFromRefreshToken($refresh_token)
     {
-        if ($this->getVariable('access_token_uri') && $this->getVariable('client_id') && $this->getVariable('client_secret'))
-        {
-            return json_decode($this->makeRequest(
-                $this->getVariable('access_token_uri'),
-                'POST',
-                array(
-                    'grant_type'    => 'refresh_token',
-                    'client_id'     => $this->getVariable('client_id'),
-                    'client_secret' => $this->getVariable('client_secret'),
-                    'refresh_token' => $refresh_token,
-                    'redirect_uri'  => $this->getCurrentUri()
-                )
-            ), TRUE);
-        }
-        return NULL;
+        $params = array(
+            'grant_type'    => 'refresh_token',
+            'client_id'     => $this->getVariable('client_id'),
+            'client_secret' => $this->getVariable('client_secret'),
+            'refresh_token' => $refresh_token,
+            'redirect_uri'  => $this->getCurrentUri()
+        );
+        return $this->makeTokenRequest($params);
     }
 
     /**
@@ -438,21 +505,14 @@ abstract class OAuth2BaseClient
      */
     private function getAccessTokenFromPassword($username, $password)
     {
-        if ($this->getVariable('access_token_uri') && $this->getVariable('client_id') && $this->getVariable('client_secret'))
-        {
-            return json_decode($this->makeRequest(
-                $this->getVariable('access_token_uri'),
-                'POST',
-                array(
-                    'grant_type'    => 'password',
-                    'client_id'     => $this->getVariable('client_id'),
-                    'client_secret' => $this->getVariable('client_secret'),
-                    'username'      => $username,
-                    'password'      => $password
-                )
-            ), TRUE);
-        }
-        return NULL;
+        $params = array(
+            'grant_type'    => 'password',
+            'client_id'     => $this->getVariable('client_id'),
+            'client_secret' => $this->getVariable('client_secret'),
+            'username'      => $username,
+            'password'      => $password
+        );
+        return $this->makeTokenRequest($params);
     }
 
     /**
@@ -504,6 +564,7 @@ abstract class OAuth2BaseClient
      */
     protected function makeRequest($path, $method = 'GET', $params = array(), $ch = NULL)
     {
+        Yii::log("Making request to $path through $method with params ".var_export($params, true));
         if (!$ch)
         {
             $ch = curl_init();
@@ -546,13 +607,6 @@ abstract class OAuth2BaseClient
 
         curl_setopt_array($ch, $opts);
         $result = curl_exec($ch);
-
-        if (curl_errno($ch) == 60)
-        { // CURLE_SSL_CACERT
-            error_log('Invalid or no certificate authority found, using bundled information');
-            curl_setopt($ch, CURLOPT_CAINFO, dirname(__FILE__) . '/fb_ca_chain_bundle.crt');
-            $result = curl_exec($ch);
-        }
 
         if ($result === FALSE)
         {
