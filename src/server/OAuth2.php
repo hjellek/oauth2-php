@@ -2,13 +2,13 @@
 require_once 'error/OAuth2ServerException.php';
 require_once 'error/OAuth2AuthenticateException.php';
 require_once 'error/OAuth2RedirectException.php';
+require_once 'interface/IOAuth2Storage.php';
 require_once 'interface/IOAuth2GrantClient.php';
 require_once 'interface/IOAuth2GrantCode.php';
 require_once 'interface/IOAuth2GrantExtension.php';
 require_once 'interface/IOAuth2GrantImplicit.php';
 require_once 'interface/IOAuth2GrantUser.php';
 require_once 'interface/IOAuth2RefreshTokens.php';
-require_once 'interface/IOAuth2Storage.php';
 
 /**
  * @mainpage
@@ -661,7 +661,7 @@ class OAuth2 {
 				if (!($this->storage instanceof IOAuth2GrantUser)) {
 					throw new OAuth2ServerException(self::HTTP_BAD_REQUEST, self::ERROR_UNSUPPORTED_GRANT_TYPE);
 				}
-
+                // todo: client should also be verified here
 				if (!$input["username"] || !$input["password"]) {
 					throw new OAuth2ServerException(self::HTTP_BAD_REQUEST, self::ERROR_INVALID_REQUEST, 'Missing parameters. "username" and "password" required');
 				}
